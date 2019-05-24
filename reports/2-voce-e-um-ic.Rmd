@@ -1,6 +1,6 @@
 ---
 title: "Implementando ICs"
-author: "Nazareno"
+author: "Wesley Brenno"
 output:
   html_document:
     theme: readable
@@ -48,6 +48,9 @@ Utilizaremos ICs para estimar duas métricas sobre os usuários do LastFM em ger
 
 Crie intervalos com 95% de confiança.
 
+
+Primeiramente para responder essas questões, calculamos na amostra utilizada a média da proporção de novos artistas em geral escutada por usuários e a correlação entre a popularidade mediana e a proporção de novos artistas. 
+
 ```{r}
 funcao_theta = function(df) {
   df %>%
@@ -62,6 +65,8 @@ theta_cor = as.double(theta[1,2])
 theta_prop
 theta_cor
 ```
+
+O segundo passo foi realizar 4000 reamostragens a partir das amostra inicial, e calcular a média da proporção e da correlação.
 
 ```{r}
 repeticoes = 4000 # pelo menos 2000, mas mais não faz mal.
@@ -83,6 +88,10 @@ reamostragens = tibble(i = 1:repeticoes) %>%
 reamostragens
 ```
 
+## Questão 1 - Qual a proporção de novos artistas em geral escutada por usuários?
+
+Com os dados anteriormente gerados, temos um histograma da distribuição amostral das médias da proporção das reamostras geradas e um histograma da diferença das médias da proporção das reamostras para a da amostra original.
+
 ```{r}
 reamostragens %>%
   ggplot(aes(x = mean_prop)) +
@@ -97,13 +106,17 @@ reamostragens %>%
                  fill = "white")
 ```
 
+A partir daí, calculamos o erro inferior e o erro superior, levando em conta criar um intervalo com 95% dos valores que a média da proporção pode assumir nas reamostras. Para isso utilizamos o 2.5 percentil e o 97.5 percentil. 
+
 ```{r}
 intervalo = reamostragens %>% 
   mutate(erro_prop = mean_prop - theta_prop) %>% 
-  summarise(erro_prop_i = quantile(erro_prop, .05), 
-            erro_prop_s = quantile(erro_prop, .95))
+  summarise(erro_prop_i = quantile(erro_prop, .025), 
+            erro_prop_s = quantile(erro_prop, .975))
 intervalo
 ```
+
+E com isso obtemos o intervalo de confiança subtraindo o erro inferior e somando o erro superior da média da amostra original.
 
 ```{r}
 intervalo = intervalo %>% 
@@ -112,6 +125,8 @@ intervalo = intervalo %>%
 
 intervalo
 ```
+
+Assim temos que a proporção de novos artistas em geral escutada por usuários estimada é 0.242366, ou seja 24.23% dos artistas escutados são novos, podendo variar 0.01153788 para menos, e 0.0118495 para mais. Temos assim um intervalo entre 23.08% e 25.42% , com uma probabilidade de 95% do intervalo refletir a realidade, ou seja, 95% de changes da média real da população está dentro desse intervalo.
 
 ```{r}
 ggplot() +
@@ -134,6 +149,11 @@ ggplot() +
   labs(title = expression("Intervalo estimado via bootstrap"))
 ```
 
+
+## Questão 2 - Para os usuários que gostam de música muito pop (mediana_pop > 5), qual a correlação entre a popularidade mediana dos artistas escutado e a proporção dos artistas escutados que eram novos. 
+
+Seguimos os passos anteriores para questão 1, e obtemos um histograma da distribuição amostral da correlação entre a popularidade medidana e a proporção de novos artistas escutados das reamostras geradas, e um histograma da diferença dessa estatística das reamostras para a da amostra original.
+
 ```{r}
 reamostragens %>%
   ggplot(aes(x = correlacao)) +
@@ -148,13 +168,17 @@ reamostragens %>%
                  fill = "white")
 ```
 
+A partir daí, calculamos o erro inferior e o erro superior, levando em conta criar um intervalo com 95% dos valores que a correlação pode assumir nas reamostras. Para isso utilizamos o 2.5 percentil e o 97.5 percentil. 
+
 ```{r}
 intervalo_cor = reamostragens %>% 
   mutate(erro_cor = correlacao - theta_cor) %>% 
-  summarise(erro_cor_i = quantile(erro_cor, .05), 
-            erro_cor_s = quantile(erro_cor, .95))
+  summarise(erro_cor_i = quantile(erro_cor, .025), 
+            erro_cor_s = quantile(erro_cor, .975))
 intervalo_cor
 ```
+
+E com isso obtemos o intervalo de confiança.
 
 ```{r}
 intervalo_cor = intervalo_cor %>% 
@@ -163,6 +187,9 @@ intervalo_cor = intervalo_cor %>%
 
 intervalo_cor
 ```
+
+Assim temos que a correlação (utilizando o método de pearson) entre a popularidade mediana dos artistas escutado e a proporção de novos artista escutados é -0.05679804, podendo variar 0.1240708 para menos, e 0.1239988 para mais. Temos assim um intervalo entre -0.1808688 e 0.06720078 com uma probabilidade de 95% do intervalo refletir a realidade, ou seja, 95% de changes da média real da população está contiga nesse intervalo. Então estimasse que exista uma correlação fraca entre as variáveis que pode ser negativa ou positiva. 
+
 
 ```{r}
 ggplot() +
@@ -185,6 +212,12 @@ ggplot() +
   labs(title = expression("Intervalo estimado via bootstrap"))
 ```
 
+## Gerando os intervalos de confiança utlizando a biblioteca boot
+
+Utilizando a biblioteca boot para gerar os intervalos de confiança, obtemos resultados bastante parecidos. A diferença é esperada já que a cada execução da reamostragem são geradas reamostras diferentes aleatoriamente. 
+
+Para a proporção temos o intervalo [0.2310567, 0.2541075] - [23.10%, 25,41%]
+
 ```{r}
 theta_proporcao <- function(df, i) {
     df %>%
@@ -195,7 +228,7 @@ theta_proporcao <- function(df, i) {
 
 booted <- boot(data = lastfm, 
                statistic = theta_proporcao, 
-               R = 2000)
+               R = 4000)
 
 ci = tidy(booted, 
           conf.level = .95,
@@ -204,6 +237,8 @@ ci = tidy(booted,
 
 glimpse(ci)
 ```
+
+Para a proporção temos o intervalo [-0.1844012, 0.06898568] 
 
 ```{r}
 theta_correlacao = function(df,i) {
@@ -214,7 +249,7 @@ theta_correlacao = function(df,i) {
 
 booted <- boot(data = lastfm, 
                statistic = theta_correlacao, 
-               R = 2000)
+               R = 4000)
 
 ci = tidy(booted, 
           conf.level = .95,
